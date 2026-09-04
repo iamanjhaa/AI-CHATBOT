@@ -11,6 +11,7 @@ from app.schemas.chat import (
     SafetyGuidance,
     SeverityLevel,
     SolutionInfo,
+    UserIntent,
 )
 
 
@@ -51,12 +52,28 @@ class AIProblemResolutionService:
         except Exception as exc:
             raise AIServiceError("AI response did not match the chatbot response schema.") from exc
 
+        if (
+            response.severity == SeverityLevel.CRITICAL
+            or getattr(response, "immediate_danger", False)
+            or self._should_force_critical(
+            cleaned_problem,
+            response,
+            )
+        ):
+            source_response = response
+            response = self._build_critical_emergency_response(cleaned_problem, response)
+            response = self._with_phase2_metadata(
+                response,
+                source_response,
+                forced_critical=True,
+            )
+            self._remember_turn(cleaned_problem, response)
+            return response
+
+        response = self._normalize_non_critical_response(cleaned_problem, response)
+        response = self._with_phase2_metadata(response, response)
         self._remember_turn(cleaned_problem, response)
-
-        if response.severity == SeverityLevel.CRITICAL:
-            return self._build_critical_emergency_response(cleaned_problem, response)
-
-        return self._normalize_non_critical_response(cleaned_problem, response)
+        return response
 
     def _build_payload(self, problem: str) -> dict[str, Any]:
         context = self._format_context()
@@ -140,19 +157,45 @@ class AIProblemResolutionService:
         original_problem: str,
         response: ChatResponse,
     ) -> ChatResponse:
-        solution_info = response.solution_info
-        safety_guidance = response.safety_guidance
-        escalation = response.escalation
+        solution_info = getattr(response, "solution_info", None)
+        safety_guidance = getattr(response, "safety_guidance", None)
+        escalation = getattr(response, "escalation", None)
+        clarification_question = getattr(response, "clarification_question", None)
+        if getattr(response, "clarification_needed", False):
+            steps = getattr(solution_info, "steps", None) if solution_info else None
+            question = clarification_question or (steps[0] if steps else None)
+            clarification_question = question
+            solution_info = SolutionInfo(steps=[question] if question else None)
+            safety_guidance = None
+            escalation = None
+            return ChatResponse(
+                problem=original_problem,
+                understanding=response.understanding,
+                user_intent=getattr(response, "user_intent", None),
+                severity=response.severity,
+                immediate_danger=getattr(response, "immediate_danger", None),
+                clarification_needed=True,
+                clarification_question=clarification_question,
+                can_solve_myself=False,
+                solution_info=solution_info,
+                solution=[question] if question else None,
+            )
 
         return ChatResponse(
             problem=original_problem,
             understanding=response.understanding,
+            user_intent=getattr(response, "user_intent", None),
             severity=response.severity,
+            immediate_danger=getattr(response, "immediate_danger", None),
+            clarification_needed=getattr(response, "clarification_needed", None),
+            clarification_question=clarification_question,
             can_solve_myself=response.can_solve_myself,
             solution_info=solution_info,
             safety_guidance=safety_guidance,
             escalation=escalation,
-            prevention=response.prevention,
+            prevention=None
+            if getattr(response, "clarification_needed", False)
+            else getattr(response, "prevention", None),
             solution=getattr(response, "solution", None)
             or (getattr(solution_info, "steps", None) if solution_info else None),
             required_tools=getattr(response, "required_tools", None)
@@ -167,6 +210,48 @@ class AIProblemResolutionService:
             or (getattr(safety_guidance, "when_to_stop", None) if safety_guidance else None),
             when_to_contact_authority=getattr(response, "when_to_contact_authority", None)
             or (getattr(escalation, "contact", None) if escalation else None),
+        )
+
+    def _with_phase2_metadata(
+        self,
+        response: ChatResponse,
+        source_response: ChatResponse,
+        forced_critical: bool = False,
+    ) -> ChatResponse:
+        user_intent = getattr(source_response, "user_intent", None)
+        if forced_critical:
+            user_intent = UserIntent.EMERGENCY_HELP
+
+        immediate_danger = getattr(source_response, "immediate_danger", None)
+        if forced_critical or response.severity == SeverityLevel.CRITICAL:
+            immediate_danger = True
+
+        clarification_needed = getattr(source_response, "clarification_needed", None)
+        if forced_critical or response.severity == SeverityLevel.CRITICAL:
+            clarification_needed = False
+
+        return ChatResponse(
+            problem=response.problem,
+            understanding=response.understanding,
+            user_intent=user_intent,
+            severity=response.severity,
+            immediate_danger=immediate_danger,
+            clarification_needed=clarification_needed,
+            clarification_question=None
+            if forced_critical or response.severity == SeverityLevel.CRITICAL
+            else getattr(source_response, "clarification_question", None),
+            can_solve_myself=response.can_solve_myself,
+            solution_info=response.solution_info,
+            safety_guidance=response.safety_guidance,
+            escalation=response.escalation,
+            prevention=getattr(response, "prevention", None),
+            solution=getattr(response, "solution", None),
+            required_tools=getattr(response, "required_tools", None),
+            estimated_time=getattr(response, "estimated_time", None),
+            estimated_cost=getattr(response, "estimated_cost", None),
+            safety_precautions=getattr(response, "safety_precautions", None),
+            when_to_stop=getattr(response, "when_to_stop", None),
+            when_to_contact_authority=getattr(response, "when_to_contact_authority", None),
         )
 
     def _remember_turn(self, problem: str, response: ChatResponse) -> None:
@@ -262,12 +347,17 @@ class AIProblemResolutionService:
         ).lower()
 
         emergency_signals = [
+            ("earthquake", ["earthquake", "bhukamp"]),
             ("gas_leak", ["gas", "lpg", "cylinder", "गैस", "सिलेंडर"]),
             ("fire", ["fire", "aag", "आग", "burn", "smoke", "धुआ", "धुआं"]),
             ("electric_shock", ["shock", "current", "live wire", "electric", "करंट", "बिजली", "तार"]),
             ("flood_drowning", ["flood", "drown", "water level", "बाढ़", "डूब", "पानी भर"]),
             ("building_collapse", ["collapse", "building", "wall fell", "roof fell", "gir", "गिर", "मलबा"]),
             ("serious_injury", ["injury", "injured", "bleeding", "unconscious", "चोट", "खून", "बेहोश"]),
+            ("cyclone_storm", ["cyclone", "storm", "toofan", "severe wind"]),
+            ("landslide", ["landslide", "pahad gir", "slope collapse"]),
+            ("lightning", ["lightning", "bijli gir"]),
+            ("chemical_emergency", ["chemical", "acid", "toxic", "poison gas"]),
         ]
 
         for emergency_type, signals in emergency_signals:
@@ -276,7 +366,53 @@ class AIProblemResolutionService:
 
         return "life_threatening"
 
+    def _should_force_critical(self, problem: str, ai_response: ChatResponse) -> bool:
+        text = " ".join(
+            [
+                problem,
+                ai_response.understanding.summary,
+                ai_response.understanding.category or "",
+                ai_response.understanding.user_intent or "",
+            ]
+        ).lower()
+
+        immediate_danger_signals = [
+            "active emergency",
+            "life-threatening",
+            "immediate danger",
+            "trapped",
+            "phansa",
+            "evacuate",
+            "emergency safety",
+            "call emergency",
+            "112",
+        ]
+        disaster_signals = [
+            "earthquake",
+            "bhukamp",
+            "fire",
+            "aag",
+            "gas leak",
+            "electric shock",
+            "live wire",
+            "drowning",
+            "building collapse",
+            "cyclone",
+            "severe storm",
+            "landslide",
+            "lightning",
+            "chemical spill",
+            "unconscious",
+            "serious injury",
+        ]
+
+        return any(signal in text for signal in immediate_danger_signals) or any(
+            signal in text for signal in disaster_signals
+        )
+
     def _build_critical_follow_up(self, emergency_type: str) -> Optional[str]:
+        if emergency_type == "earthquake":
+            return "Kya aap building ke andar hain ya bahar safe jagah par hain?"
         if emergency_type in {"fire", "gas_leak", "building_collapse", "life_threatening"}:
             return "Kya aap abhi safe jagah par hain?"
         if emergency_type == "electric_shock":
@@ -285,6 +421,8 @@ class AIProblemResolutionService:
             return "Kya aap paani se door safe jagah par hain?"
         if emergency_type == "serious_injury":
             return "Kya injured person hosh mein hai?"
+        if emergency_type in {"cyclone_storm", "landslide", "lightning", "chemical_emergency"}:
+            return "Kya aap abhi safe location par hain?"
         return None
 
 
@@ -293,6 +431,24 @@ def generate_ai_problem_resolution(problem: str) -> ChatResponse:
 
 
 CRITICAL_EMERGENCY_ACTIONS = {
+    "earthquake": {
+        "frontend_marker": "critical emergency",
+        "steps": [
+            "Drop, Cover, and Hold On immediately.",
+            "Protect your head and neck under a sturdy table or beside an interior wall.",
+            "Stay away from windows, glass, shelves, and heavy objects.",
+            "Do not use elevators.",
+            "If you are already outside, move away from buildings, power lines, trees, and walls.",
+            "Call 112 in India if anyone is trapped, injured, or in immediate danger.",
+        ],
+        "precautions": [
+            "Be alert for aftershocks.",
+            "Do not run outside while shaking is strong if debris may fall.",
+            "If trapped, cover your mouth, stay as calm as possible, and signal for help.",
+        ],
+        "contact": "Call 112 in India if anyone is trapped, injured, or in immediate danger.",
+        "reason": "Earthquakes can cause falling objects, structural damage, aftershocks, and injuries.",
+    },
     "fire": {
         "frontend_marker": "fire emergency",
         "steps": [
@@ -389,6 +545,70 @@ CRITICAL_EMERGENCY_ACTIONS = {
         "contact": "Call 112 in India or emergency medical help immediately.",
         "reason": "Serious injury may need urgent medical care.",
     },
+    "cyclone_storm": {
+        "frontend_marker": "critical emergency",
+        "steps": [
+            "Move indoors to the strongest interior room away from windows.",
+            "Stay away from glass, balconies, loose objects, and flood-prone areas.",
+            "Do not go outside during strong winds or flying debris.",
+            "Call 112 in India if anyone is injured, trapped, or in immediate danger.",
+        ],
+        "precautions": [
+            "Avoid elevators and damaged electrical areas.",
+            "Follow official local warnings and evacuation orders.",
+            "If flooding starts, move to higher ground inside a safe structure.",
+        ],
+        "contact": "Call 112 in India or local disaster response if there is immediate danger.",
+        "reason": "Cyclones and severe storms can cause flying debris, flooding, electrical danger, and structural damage.",
+    },
+    "landslide": {
+        "frontend_marker": "critical emergency",
+        "steps": [
+            "Move away from the slope, falling debris, or unstable ground immediately.",
+            "Warn nearby people if you can do so safely.",
+            "Do not cross active mud, rocks, or flowing debris.",
+            "Call 112 in India or local disaster response from a safe place.",
+        ],
+        "precautions": [
+            "Stay away from damaged roads, hillsides, retaining walls, and power lines.",
+            "Do not re-enter an affected building or slope area.",
+            "If someone is trapped, wait for trained rescuers.",
+        ],
+        "contact": "Call 112 in India or local disaster response immediately.",
+        "reason": "Landslides can continue moving and can trap or injure people without warning.",
+    },
+    "lightning": {
+        "frontend_marker": "critical emergency",
+        "steps": [
+            "Move indoors immediately or into a hard-topped vehicle if no building is nearby.",
+            "Stay away from open fields, rooftops, trees, poles, water, and metal objects.",
+            "Do not use wired electrical devices or plumbing during lightning.",
+            "Call 112 in India if someone is struck, unconscious, burned, or not breathing normally.",
+        ],
+        "precautions": [
+            "Do not shelter under isolated trees.",
+            "Stay inside until the storm has clearly passed.",
+            "If someone is struck, it is safe to touch them after the strike, but call emergency help first.",
+        ],
+        "contact": "Call 112 in India for lightning injury or immediate danger.",
+        "reason": "Lightning can cause cardiac arrest, burns, and secondary electrical hazards.",
+    },
+    "chemical_emergency": {
+        "frontend_marker": "critical emergency",
+        "steps": [
+            "Move away from the chemical, fumes, spill, or gas cloud immediately.",
+            "Avoid touching, smelling, or trying to clean the substance.",
+            "If exposed, remove contaminated clothing only if safe and rinse affected skin with clean water.",
+            "Call 112 in India, fire service, or poison/emergency medical support from a safe place.",
+        ],
+        "precautions": [
+            "Do not mix chemicals or pour water unless emergency responders advise it.",
+            "Do not stay in enclosed areas with fumes.",
+            "Keep others away from the affected area.",
+        ],
+        "contact": "Call 112 in India, fire service, or emergency medical support immediately.",
+        "reason": "Chemical exposure can cause poisoning, burns, breathing difficulty, or fire risk.",
+    },
     "life_threatening": {
         "frontend_marker": "critical emergency",
         "steps": [
@@ -420,8 +640,34 @@ For every response:
 - Assess severity from meaning and context, not from keywords alone.
 - Generate guidance specific to the described problem.
 - Include only useful fields. Do not fill tools, cost, time, prevention, or escalation unless they help for this problem.
+- Do not invent or generate helpline phone numbers; verified helpline numbers are attached separately by the backend registry.
 - If the message is vague, such as "AC kharab hai", ask one concise clarification question instead of guessing.
 - If the latest message is a follow-up, use recent conversation context to refine the same problem.
+
+Phase 1 understanding contract:
+- understanding.summary must state what happened and the main object/place/situation involved in one specific sentence.
+- understanding.category must be a short free-form label for the specific situation, not a forced predefined category.
+- understanding.user_intent must state the likely intent and whether the information is sufficient, for example "diagnosis requested; enough information for basic checks" or "solution requested; clarification needed".
+- If clarification is needed, ask exactly one concise question in solution_info.steps and avoid giving a guessed full solution.
+- For unseen problems, reason from the described situation and common-sense safety, not from a stored list of categories.
+
+Phase 2 intent and severity engine:
+- Set user_intent to exactly one of SOLUTION, DIAGNOSIS, INFORMATION, PREVENTION, EMERGENCY_HELP, REPORT_COMPLAINT, PROFESSIONAL_HELP, or AMBIGUOUS.
+- Set immediate_danger to true only when there is an immediate or potentially immediate threat to life/safety.
+- Set clarification_needed to true when the user's message lacks enough detail to safely choose the next action.
+- If clarification_needed is true, set clarification_question to exactly one concise question and put the same question as the only item in solution_info.steps.
+- If clarification_needed is false, omit clarification_question.
+- Do not guess a full cause or full solution for ambiguous messages such as "AC kharab hai" or unclear overheating like "Mera phone garam ho raha hai".
+- Severity must depend on context, not only the object: AC remote failure is LOW; water near an electrical socket is MEDIUM or CRITICAL; geyser sparking and earthquakes are CRITICAL.
+
+Phase 3 dynamic resolution engine:
+- Use user_intent, severity, immediate_danger, and clarification_needed to decide the response content.
+- If clarification_needed is true, ask exactly one useful clarification question, do not guess the problem, and do not provide a full solution until clarified.
+- For LOW and MEDIUM, generate situation-specific guidance for the user's actual problem, not generic household advice.
+- For LOW and MEDIUM, include only sections that are genuinely useful: solution_info.steps, safety_guidance, escalation, tools_materials, estimated_time, estimated_cost, and prevention are all optional.
+- Do not force tools/materials, time, cost, escalation, or prevention when they are not meaningful for that situation.
+- For DIAGNOSIS, explain likely causes only as practical checks; for SOLUTION, prioritize actionable steps; for REPORT_COMPLAINT, explain what to report and who to contact; for PROFESSIONAL_HELP, explain what expert is needed and what details to share.
+- Never use a fixed problem template as the main response. Reason semantically from the user's exact words and recent context.
 
 Classify severity as:
 - LOW: safe, simple, non-urgent issues where cautious DIY guidance is appropriate.
@@ -450,7 +696,11 @@ For CRITICAL emergencies:
 - If someone is trapped or injured, tell the user not to put themselves in danger attempting rescue.
 - Ask at most one short safety follow-up question only if useful.
 
-Treat fire, gas leak, electric shock/live wire, flood/drowning, building collapse, serious injury, violence, and similar life-threatening situations as CRITICAL based on context and intent, including Hindi and Hinglish wording such as "ghar me aag", "aag lag gayi", "gas leak ho raha hai", "current lag gaya", or "phansa hoon".
+Treat earthquake, fire, gas leak, electric shock/live wire, flood/drowning, building collapse, serious injury, cyclone/severe storm, landslide, lightning, chemical emergency, violence, and similar life-threatening situations as CRITICAL based on context and intent, including Hindi and Hinglish wording such as "bhukamp aa gaya", "ghar me aag", "aag lag gayi", "gas leak ho raha hai", "current lag gaya", "flood aa gaya", "building girne wali hai", "phansa hoon", or "jaan ko danger hai".
+
+For earthquake specifically, prioritize Drop, Cover, Hold On; protect head and neck; stay away from windows, glass, and heavy objects; do not use elevators; if outside, move away from buildings, power lines, trees, and walls; stay alert for aftershocks; and call emergency help if anyone is trapped or injured.
+
+For short follow-up messages like "ab kya karu?", "main building ke andar hu", "third floor par hu", or "bahar aa gaya hu", use recent conversation context to understand whether the active situation is an emergency and respond accordingly.
 
 If the information is insufficient and the situation is not clearly critical, ask one clarification question.
 """.strip()
@@ -470,7 +720,23 @@ RESPONSE_SCHEMA = {
             "required": ["summary"],
             "additionalProperties": False,
         },
+        "user_intent": {
+            "type": "string",
+            "enum": [
+                "SOLUTION",
+                "DIAGNOSIS",
+                "INFORMATION",
+                "PREVENTION",
+                "EMERGENCY_HELP",
+                "REPORT_COMPLAINT",
+                "PROFESSIONAL_HELP",
+                "AMBIGUOUS",
+            ],
+        },
         "severity": {"type": "string", "enum": ["LOW", "MEDIUM", "CRITICAL"]},
+        "immediate_danger": {"type": "boolean"},
+        "clarification_needed": {"type": "boolean"},
+        "clarification_question": {"type": "string"},
         "can_solve_myself": {"type": "boolean"},
         "solution_info": {
             "type": "object",
@@ -502,6 +768,14 @@ RESPONSE_SCHEMA = {
         },
         "prevention": {"type": "array", "items": {"type": "string"}},
     },
-    "required": ["problem", "understanding", "severity", "can_solve_myself"],
+    "required": [
+        "problem",
+        "understanding",
+        "user_intent",
+        "severity",
+        "immediate_danger",
+        "clarification_needed",
+        "can_solve_myself",
+    ],
     "additionalProperties": False,
 }

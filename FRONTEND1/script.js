@@ -19,11 +19,11 @@ const responseCards = [];
 
 const ui = {
   en: {
-    appTitle: "Problem Solving Chatbot",
+    appTitle: "SAHAYAK",
     language: "Language",
     status: "Mock AI",
     notice: "Describe a household or local societal problem in Hindi, Hinglish, or English.",
-    welcome: "Hello! Tell me your problem. I will classify it and suggest safe, practical next steps.",
+    welcome: "Hello! I am SAHAYAK. Tell me your problem and I will suggest safe, practical next steps.",
     placeholder: "Example: Mere bathroom ka tap leak ho raha hai...",
     problemLabel: "Describe your problem",
     send: "Send",
@@ -50,11 +50,11 @@ const ui = {
     followUp: "Follow-up Question",
   },
   hi: {
-    appTitle: "समस्या समाधान चैटबॉट",
+    appTitle: "SAHAYAK",
     language: "भाषा",
     status: "मॉक एआई",
     notice: "घरेलू या स्थानीय सामाजिक समस्या हिंदी, हिंग्लिश या अंग्रेज़ी में लिखें।",
-    welcome: "नमस्ते! अपनी समस्या बताइए। मैं उसे समझकर सुरक्षित और व्यावहारिक अगले कदम बताऊंगा।",
+    welcome: "नमस्ते! मैं SAHAYAK हूं। अपनी समस्या बताइए, मैं सुरक्षित और व्यावहारिक अगले कदम बताऊंगा।",
     placeholder: "उदाहरण: मेरे बाथरूम का नल लीक हो रहा है...",
     problemLabel: "अपनी समस्या लिखें",
     send: "भेजें",
@@ -256,10 +256,15 @@ chatForm.addEventListener("submit", async (event) => {
 });
 
 function buildDynamicResponse(apiData) {
+  if (hasBackendGuidance(apiData)) {
+    return buildBackendResponse(apiData);
+  }
+
   const problem = apiData.problem || "";
   const matches = findMatchingRules(problem);
   const severity = resolveSeverity(apiData.severity, matches);
   const response = emptyResponse(problem, severity);
+  response.helplines = Array.isArray(apiData.helplines) ? apiData.helplines : [];
 
   if (matches.length === 0) {
     applyUnknownProblemGuidance(response, problem);
@@ -275,6 +280,46 @@ function buildDynamicResponse(apiData) {
   }
 
   return response;
+}
+
+function hasBackendGuidance(apiData) {
+  return Boolean(
+    apiData?.understanding ||
+      apiData?.solution_info ||
+      apiData?.safety_guidance ||
+      apiData?.clarification_question ||
+      apiData?.helplines?.length
+  );
+}
+
+function buildBackendResponse(apiData) {
+  const problem = apiData.problem || "";
+  const solutionInfo = apiData.solution_info || {};
+  const safetyGuidance = apiData.safety_guidance || {};
+  const escalation = apiData.escalation || {};
+  const content = {
+    identified: apiData.understanding?.summary || summarizeProblem(problem, "en"),
+    solution: solutionInfo.steps || apiData.solution,
+    tools: solutionInfo.tools_materials || apiData.required_tools,
+    estimatedTime: solutionInfo.estimated_time || apiData.estimated_time,
+    estimatedCost: solutionInfo.estimated_cost || apiData.estimated_cost,
+    safety: safetyGuidance.precautions || apiData.safety_precautions,
+    whenNotDiy: safetyGuidance.when_to_stop || apiData.when_to_stop,
+    authority: escalation.contact || apiData.when_to_contact_authority,
+    prevention: apiData.prevention,
+    followUp: apiData.clarification_question,
+  };
+
+  return {
+    problem,
+    severity: apiData.severity || "LOW",
+    can_solve_myself: Boolean(apiData.can_solve_myself),
+    helplines: Array.isArray(apiData.helplines) ? apiData.helplines : [],
+    content: {
+      en: content,
+      hi: content,
+    },
+  };
 }
 
 function findMatchingRules(problem) {
@@ -468,6 +513,7 @@ function renderResponseCard(data) {
   card.className = "response-card";
 
   card.appendChild(renderTopSection(data));
+  appendHelplineSection(card, data.helplines);
   appendTextSection(card, t("identified"), content.identified);
   appendTextSection(card, t("severity"), severityLabel[currentLanguage][data.severity]);
   appendListSection(card, t("likelyCause"), content.likelyCause);
@@ -484,6 +530,39 @@ function renderResponseCard(data) {
   appendTextSection(card, t("followUp"), content.followUp);
 
   return card;
+}
+
+function appendHelplineSection(card, helplines) {
+  if (!Array.isArray(helplines) || helplines.length === 0) return;
+
+  const section = document.createElement("section");
+  const heading = document.createElement("h2");
+  const list = document.createElement("div");
+
+  heading.className = "section-title";
+  heading.textContent = "Helplines";
+
+  helplines.forEach((helpline) => {
+    const item = document.createElement("article");
+    const category = document.createElement("p");
+    const name = document.createElement("p");
+    const number = document.createElement("p");
+    const purpose = document.createElement("p");
+    const callLink = document.createElement("a");
+
+    category.textContent = `Category: ${helpline.category || "N/A"}`;
+    name.textContent = `Service: ${helpline.name || "N/A"}`;
+    number.textContent = `Phone: ${helpline.number || "N/A"}`;
+    purpose.textContent = `Purpose: ${helpline.purpose || "N/A"}`;
+    callLink.textContent = "Call";
+    callLink.href = `tel:${String(helpline.number || "").replace(/[^\d+]/g, "")}`;
+
+    item.append(category, name, number, purpose, callLink);
+    list.appendChild(item);
+  });
+
+  section.append(heading, list);
+  card.appendChild(section);
 }
 
 function renderTopSection(data) {
