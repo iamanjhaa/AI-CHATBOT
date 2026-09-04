@@ -18,15 +18,22 @@
   box-sizing: border-box;
 }
 
+html {
+  min-height: 100%;
+  overflow-x: hidden;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
+  overflow-x: hidden;
   background:
     radial-gradient(circle at top left, rgba(23, 107, 93, 0.10), transparent 28rem),
     var(--bg);
   color: var(--text);
   font-family: Arial, Helvetica, sans-serif;
- 
 }
 
 button,
@@ -37,6 +44,7 @@ textarea {
 .app-shell {
   width: min(100%, 980px);
   min-height: 100vh;
+  min-height: 100dvh;
   margin: 0 auto;
   padding: 24px;
   display: flex;
@@ -66,13 +74,19 @@ textarea {
   background: #fbfdfc;
 }
 
+.brand-block {
+  min-width: 0;
+}
+
 .eyebrow {
   margin: 0 0 5px;
   color: var(--muted);
   font-size: 0.78rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
+  line-height: 1.45;
   text-transform: uppercase;
+  max-width: 34rem;
 }
 
 /* 
@@ -117,8 +131,27 @@ textarea {
 
 h1 {
   margin: 0;
-  font-size: clamp(1.25rem, 2.6vw, 1.8rem);
+  font-family: "Poppins", "Segoe UI", Arial, Helvetica, sans-serif;
+  font-size: clamp(1.65rem, 4vw, 2.6rem);
+  font-weight: 800;
+  letter-spacing: 0.08em;
   line-height: 1.2;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+  background: linear-gradient(
+      90deg,
+      #176b5d,
+      #2563eb,
+      #7c3aed,
+      #06b6d4,
+      #176b5d
+  );
+  background-size: 300% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 5px 12px rgba(37, 99, 235, 0.16));
+  animation: sahayakGlow 4s ease-in-out infinite;
 }
 
 .status-pill,
@@ -177,15 +210,19 @@ select:focus {
   background: #f8faf9;
   border-bottom: 1px solid var(--line);
   font-size: 0.95rem;
+  line-height: 1.45;
 }
 
 .chat-messages {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 22px;
   display: flex;
   flex-direction: column;
   gap: 18px;
+  scroll-behavior: smooth;
 }
 
 .message {
@@ -193,6 +230,8 @@ select:focus {
   align-items: flex-start;
   gap: 10px;
   max-width: 88%;
+  min-width: 0;
+  animation: messageIn 180ms ease-out;
 }
 
 .user-message {
@@ -223,11 +262,15 @@ select:focus {
 }
 
 .bubble {
+  min-width: 0;
+  max-width: 100%;
   padding: 13px 15px;
   border-radius: 8px;
   background: var(--ai);
   border: 1px solid #dce9e3;
   line-height: 1.5;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .user-message .bubble {
@@ -243,6 +286,12 @@ select:focus {
 .response-card {
   display: grid;
   gap: 14px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.response-card section {
+  min-width: 0;
 }
 
 .response-top {
@@ -300,8 +349,43 @@ ul {
   padding-left: 20px;
 }
 
+p,
+li,
+a,
+strong,
+span {
+  overflow-wrap: anywhere;
+}
+
 li + li {
   margin-top: 5px;
+}
+
+.response-card article {
+  min-width: 0;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.response-card article p + p {
+  margin-top: 4px;
+}
+
+.response-card article a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  margin-top: 8px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  color: #ffffff;
+  background: var(--primary);
+  font-weight: 800;
+  text-decoration: none;
 }
 
 .error-box {
@@ -324,10 +408,12 @@ li + li {
   padding: 16px 22px 22px;
   border-top: 1px solid var(--line);
   background: #fbfdfc;
+  flex: 0 0 auto;
 }
 
 textarea {
   flex: 1;
+  min-width: 0;
   min-height: 48px;
   max-height: 140px;
   resize: vertical;
@@ -347,6 +433,7 @@ textarea:focus {
 button {
   min-width: 92px;
   min-height: 48px;
+  padding: 0 18px;
   border: 0;
   border-radius: 8px;
   color: #ffffff;
@@ -412,15 +499,30 @@ button:disabled {
   }
 }
 
+@keyframes messageIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (max-width: 720px) {
   .app-shell {
     padding: 0;
     align-items: stretch;
+    width: 100%;
   }
 
   .chat-panel {
     min-height: 100vh;
+    min-height: 100dvh;
     height: 100vh;
+    height: 100dvh;
     border: 0;
     border-radius: 0;
   }
@@ -435,10 +537,54 @@ button:disabled {
 
   .chat-header {
     align-items: flex-start;
+    gap: 12px;
+    padding-top: 16px;
+    padding-bottom: 14px;
+  }
+
+  .header-controls {
+    gap: 8px;
+  }
+
+  h1 {
+    font-size: clamp(1.55rem, 9vw, 2.2rem);
+    letter-spacing: 0.05em;
+    line-height: 1.05;
+  }
+
+  .eyebrow {
+    margin-top: 6px;
+    font-size: 0.7rem;
+    letter-spacing: 0.035em;
+  }
+
+  .notice {
+    padding-top: 10px;
+    padding-bottom: 10px;
+    font-size: 0.88rem;
+  }
+
+  .chat-messages {
+    gap: 14px;
+    padding-top: 16px;
+    padding-bottom: 16px;
   }
 
   .message {
     max-width: 100%;
+    gap: 8px;
+  }
+
+  .avatar {
+    width: 30px;
+    height: 30px;
+    flex-basis: 30px;
+    font-size: 0.68rem;
+  }
+
+  .bubble {
+    padding: 11px 12px;
+    font-size: 0.94rem;
   }
 
   .meta-grid {
@@ -446,40 +592,21 @@ button:disabled {
   }
 
   .chat-form {
-    flex-direction: column;
+    gap: 10px;
+    padding-top: 12px;
+    padding-bottom: max(14px, env(safe-area-inset-bottom));
+  }
+
+  textarea {
+    min-height: 46px;
+    max-height: 110px;
+    resize: none;
   }
 
   button {
-    width: 100%;
+    min-width: 82px;
+    min-height: 46px;
   }
-}
-
-
-
-h1 {
-    font-family: "Poppins", "Segoe UI", sans-serif;
-    font-size: 2.6rem;
-    font-weight: 800;
-    letter-spacing: 4px;
-    margin: 0;
-    text-transform: uppercase;
-
-    background: linear-gradient(
-        90deg,
-        #2563eb,
-        #7c3aed,
-        #06b6d4,
-        #2563eb
-    );
-    background-size: 300% auto;
-
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-
-    filter: drop-shadow(0 5px 12px rgba(37, 99, 235, 0.2));
-
-    animation: sahayakGlow 4s ease-in-out infinite;
 }
 
 @keyframes sahayakGlow {
@@ -500,4 +627,71 @@ h1 {
         filter: drop-shadow(0 5px 12px rgba(37, 99, 235, 0.15));
         transform: translateY(0);
     }
+}
+
+@media (max-width: 520px) {
+  .chat-header {
+    flex-direction: column;
+  }
+
+  .header-controls {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  select {
+    flex: 1 1 9rem;
+    min-width: 0;
+  }
+
+  .status-pill {
+    min-height: 32px;
+  }
+
+  .chat-form {
+    align-items: stretch;
+  }
+}
+
+@media (max-width: 380px) {
+  .chat-header,
+  .notice,
+  .chat-messages,
+  .chat-form {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  h1 {
+    font-size: clamp(1.45rem, 8.5vw, 1.9rem);
+    letter-spacing: 0.04em;
+  }
+
+  .eyebrow {
+    font-size: 0.66rem;
+  }
+
+  .header-controls label {
+    width: 100%;
+  }
+
+  .chat-form {
+    gap: 8px;
+  }
+
+  textarea,
+  button {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
