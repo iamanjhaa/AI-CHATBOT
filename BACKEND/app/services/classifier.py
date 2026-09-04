@@ -233,6 +233,34 @@ def build_mock_response(problem: str) -> ChatResponse:
 def build_contextual_fallback_response(problem: str) -> ChatResponse | None:
     text = _normalize(problem)
 
+    if _is_pressure_cooker_danger(text):
+        return _critical_response(
+            problem,
+            "Pressure cooker explosion or unsafe pressurized cooker situation reported.",
+            "pressure_cooker_safety_emergency",
+            [
+                "Move away from the cooker and keep others away from the kitchen.",
+                "Do not touch, open, shake, cool suddenly, or try to repair a hot or pressurized cooker.",
+                "Turn off the heat only if you can do it without going close to steam, fire, or damaged parts.",
+                "If there is injury, fire, smoke, gas smell, or an active blast risk, call emergency help from a safe place.",
+            ],
+            "Call 112 in India if there is injury, fire, trapped person, or immediate danger.",
+        )
+
+    if _has_any(text, ["battery phool", "battery swollen", "swollen battery", "battery bulge", "battery expanded"]):
+        return _critical_response(
+            problem,
+            "Swollen and overheating phone battery reported.",
+            "swollen_battery_danger",
+            [
+                "Stop using and charging the phone immediately.",
+                "Keep it on a non-flammable surface away from people and heat if you can do so safely.",
+                "Do not press, puncture, open, or try to repair the battery.",
+                "Take it to an authorized service center or battery/e-waste disposal point once it is safe to move.",
+            ],
+            "Contact an authorized phone service center; call 112 in India if there is smoke, fire, or injury.",
+        )
+
     if _has_any(text, ["earthquake", "bhukamp"]):
         return _critical_response(
             problem,
@@ -248,7 +276,7 @@ def build_contextual_fallback_response(problem: str) -> ChatResponse | None:
             "Call 112 in India if anyone is trapped, injured, or in immediate danger.",
         )
 
-    if _has_any(text, ["aag", "fire", "smoke", "burning"]):
+    if _has_any(text, ["aag", "fire", "smoke", "dhua", "dhuan", "jal rahi", "jal raha"]):
         return _critical_response(
             problem,
             "Active fire or smoke emergency reported.",
@@ -262,7 +290,7 @@ def build_contextual_fallback_response(problem: str) -> ChatResponse | None:
             "Call 112 in India or the fire service immediately.",
         )
 
-    if _has_any(text, ["gas leak", "gas smell", "lpg", "cylinder leak"]):
+    if _has_any(text, ["gas leak", "gas smell", "gas ki smell", "gas smell aa", "lpg leak", "cylinder leak", "gas leak ho"]):
         return _critical_response(
             problem,
             "Possible gas leak emergency reported.",
@@ -276,7 +304,7 @@ def build_contextual_fallback_response(problem: str) -> ChatResponse | None:
             "Call 112 in India, fire service, or your gas agency immediately.",
         )
 
-    if _has_any(text, ["spark", "shock", "current", "live wire"]):
+    if _has_any(text, ["spark", "sparking", "shock", "current", "live wire", "chingari"]):
         return _critical_response(
             problem,
             "Electrical shock, spark, or live-power danger reported.",
@@ -290,6 +318,24 @@ def build_contextual_fallback_response(problem: str) -> ChatResponse | None:
             "Call 112 in India for injury or immediate danger; call a qualified electrician for electrical faults.",
         )
 
+    if _is_civic_report(text):
+        return _normal_response(
+            problem,
+            "Civic or public-area problem that should be reported to the responsible local service.",
+            "civic_report_complaint",
+            SeverityLevel.MEDIUM,
+            [
+                "Note the exact location, nearby landmark, date/time, and how long the issue has existed.",
+                "Take clear photos or videos if it is safe.",
+                "Report it through your municipal corporation, ward office, housing society, electricity department, or official local grievance channel as relevant.",
+                "Keep the complaint reference number so you can follow up.",
+            ],
+            tools=["Phone camera", "Location details", "Complaint reference number"],
+            precautions=["Avoid direct contact with garbage, sewage, broken wires, or unsafe public infrastructure."],
+            escalation_contact="Use the relevant local civic authority or official grievance channel; do not rely on unverified phone numbers.",
+            user_intent=UserIntent.REPORT_COMPLAINT,
+        )
+
     if _is_ambiguous(text):
         subject = _subject_from_text(text)
         question = f"What exactly is wrong with the {subject}: not working, leaking, overheating, noise/vibration, smell, or something else?"
@@ -301,6 +347,14 @@ def build_contextual_fallback_response(problem: str) -> ChatResponse | None:
 
     appliance = _detect_appliance(text)
     issue = _detect_issue(text)
+
+    if appliance == "phone" and issue == "overheating":
+        return _clarification_response(
+            problem,
+            "phone",
+            "Phone kitna garam hai, aur kya battery phooli hui hai, smoke, burning smell, ya sudden shutdown ho raha hai?",
+            SeverityLevel.MEDIUM,
+        )
 
     if appliance == "washing machine" and issue in {"vibration_noise", "noise"}:
         return _normal_response(
@@ -382,6 +436,22 @@ def build_contextual_fallback_response(problem: str) -> ChatResponse | None:
             escalation_contact="Visit a service center if the battery swells, the port is damaged, or the phone overheats while charging.",
         )
 
+    if appliance == "laptop" and issue == "restart":
+        return _normal_response(
+            problem,
+            "Laptop is restarting repeatedly.",
+            "laptop_repeated_restart",
+            SeverityLevel.LOW,
+            [
+                "Save your work and note whether restarts happen during startup, charging, gaming, or normal use.",
+                "Check for overheating: keep vents clear and use the laptop on a hard flat surface.",
+                "Install pending system updates and run the built-in security scan.",
+                "If restarts continue, back up important files and get battery, charger, RAM, storage, and thermal condition checked.",
+            ],
+            precautions=["Stop using it if there is burning smell, smoke, swelling, or extreme heat."],
+            escalation_contact="Visit a laptop technician/service center if restarts continue after basic checks.",
+        )
+
     if appliance == "laptop" and issue == "slow":
         return _normal_response(
             problem,
@@ -411,6 +481,22 @@ def build_contextual_fallback_response(problem: str) -> ChatResponse | None:
             "Contact an authorized phone service center or local e-waste/battery disposal service.",
         )
 
+    if appliance in {"mixer", "microwave", "oven", "geyser", "fan", "iron", "inverter", "UPS"} and issue == "burning_smell":
+        return _normal_response(
+            problem,
+            f"{appliance.title()} burning smell or overheating reported.",
+            f"{appliance.replace(' ', '_').lower()}_burning_smell",
+            SeverityLevel.MEDIUM,
+            [
+                "Switch it off immediately and unplug it if the plug area is safe, dry, and not hot.",
+                "Keep it away from cloth, paper, gas stove, and other flammable items.",
+                "Do not open the appliance body or continue testing it.",
+                "Use it again only after inspection by a qualified technician.",
+            ],
+            precautions=["Treat smoke, flame, sparks, or shock as an emergency and move away."],
+            escalation_contact="Call a qualified appliance technician; call emergency help if there is smoke, fire, or injury.",
+        )
+
     if _has_any(text, ["cyber", "online fraud", "financial fraud", "upi fraud", "scam"]):
         return _normal_response(
             problem,
@@ -427,7 +513,37 @@ def build_contextual_fallback_response(problem: str) -> ChatResponse | None:
             escalation_contact="Use the verified cybercrime helpline attached below for cyber financial fraud reporting.",
         )
 
-    if _has_any(text, ["ceiling", "plaster", "cracking sound", "crack", "gir raha"]):
+    if _has_any(text, ["ceiling", "chhat", "roof"]) and _has_any(text, ["paani", "water", "tapak", "leak", "seep"]):
+        return _normal_response(
+            problem,
+            "Water leakage from ceiling or roof reported.",
+            "ceiling_water_leakage",
+            SeverityLevel.MEDIUM,
+            [
+                "Move electronics, furniture, and people away from the dripping area.",
+                "Do not touch nearby switches, lights, fans, or wet wiring.",
+                "Place a bucket only if the spot is safe and mark/take photos of the leak.",
+                "Contact building maintenance, landlord, or a plumber/roofer to find the source.",
+            ],
+            tools=["Bucket", "Phone camera", "Dry footwear"],
+            precautions=["Switch off power to affected lights/fans only from a safe dry main switch if water is near electricity."],
+            escalation_contact="Get professional inspection urgently if water is near wiring, the ceiling is sagging, or plaster is falling.",
+        )
+
+    if _has_any(text, ["ceiling", "plaster", "cracking sound", "crack", "gir raha", "chhat"]):
+        if _has_any(text, ["badi crack", "big crack", "wide crack", "girne wali", "collapse", "jhuk", "sag"]):
+            return _critical_response(
+                problem,
+                "Major ceiling or roof crack may indicate structural danger.",
+                "structural_collapse_risk",
+                [
+                    "Move everyone away from the cracked ceiling/roof area immediately.",
+                    "Do not stand underneath or try to patch, drill, or hammer the crack.",
+                    "Warn others not to enter that room until it is inspected.",
+                    "Contact building maintenance, landlord, or a civil/structural engineer urgently.",
+                ],
+                "Call 112 in India if collapse seems imminent, debris is falling, or anyone is injured/trapped.",
+            )
         return _normal_response(
             problem,
             "Ceiling cracking sound or falling plaster reported.",
@@ -459,7 +575,7 @@ def build_contextual_fallback_response(problem: str) -> ChatResponse | None:
             escalation_contact="Call a mechanic if the bike stalls repeatedly, leaks fuel, or smells strongly of petrol.",
         )
 
-    if _has_any(text, ["sink", "drain"]) and _has_any(text, ["slow", "slowly", "drain", "jam"]):
+    if _has_any(text, ["sink", "kitchen"]) and _has_any(text, ["slow", "slowly", "drain", "jam", "blocked", "block"]):
         return _normal_response(
             problem,
             "Kitchen sink water is draining slowly.",
@@ -474,6 +590,23 @@ def build_contextual_fallback_response(problem: str) -> ChatResponse | None:
             tools=["Gloves", "Bucket", "Old brush or cloth"],
             precautions=["Do not mix drain chemicals.", "Stop if sewage-like water backs up."],
             escalation_contact="Call a plumber if basic cleaning does not improve drainage.",
+        )
+
+    if _has_any(text, ["bathroom", "toilet", "sink", "drain", "nali"]) and _has_any(text, ["block", "blocked", "jam", "clog"]):
+        return _normal_response(
+            problem,
+            "Bathroom drain blockage reported.",
+            "bathroom_drain_blockage",
+            SeverityLevel.LOW,
+            [
+                "Stop adding more water if it is backing up.",
+                "Wear gloves and remove visible hair or debris from the drain cover.",
+                "Use a plunger gently; avoid forcing rods deep into the pipe.",
+                "Call a plumber if water backs up repeatedly, multiple drains are blocked, or sewage smell appears.",
+            ],
+            tools=["Gloves", "Plunger", "Bucket", "Old brush"],
+            precautions=["Do not mix chemical drain cleaners or put bare hands in dirty standing water."],
+            escalation_contact="Call a plumber or municipal support if sewage or multiple blocked drains are involved.",
         )
 
     if _has_any(text, ["shoes", "shoe"]) and _has_any(text, ["smell", "bad smell", "odor", "badbu"]):
@@ -523,6 +656,7 @@ def _normal_response(
     precautions: list[str] | None = None,
     escalation_contact: str | None = None,
     prevention: list[str] | None = None,
+    user_intent: UserIntent = UserIntent.SOLUTION,
 ) -> ChatResponse:
     escalation = EscalationGuidance(
         required=severity == SeverityLevel.MEDIUM or bool(escalation_contact),
@@ -538,7 +672,7 @@ def _normal_response(
             category=category,
             user_intent="Get a practical, situation-specific solution",
         ),
-        user_intent=UserIntent.SOLUTION,
+        user_intent=user_intent,
         severity=severity,
         immediate_danger=False,
         clarification_needed=False,
