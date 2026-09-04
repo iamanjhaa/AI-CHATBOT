@@ -26,6 +26,7 @@ body {
     var(--bg);
   color: var(--text);
   font-family: Arial, Helvetica, sans-serif;
+ 
 }
 
 button,
@@ -64,7 +65,7 @@ textarea {
   border-bottom: 1px solid var(--line);
   background: #fbfdfc;
 }
-
+/* 
 .eyebrow {
   margin: 0 0 5px;
   color: var(--muted);
@@ -72,7 +73,47 @@ textarea {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+} */
+
+
+.eyebrow {
+    display: inline-block;
+
+    font-family: "Poppins", "Segoe UI", sans-serif;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    line-height: 1.5;
+
+    text-transform: uppercase;
+    text-align: center;
+
+    padding: 7px 16px;
+    margin-bottom: 10px;
+
+    color: #4f46e5;
+    background: rgba(99, 102, 241, 0.08);
+
+    border: 1px solid rgba(99, 102, 241, 0.18);
+    border-radius: 999px;
+
+    box-shadow: 0 4px 15px rgba(79, 70, 229, 0.08);
+
+    transition: all 0.3s ease;
 }
+
+.eyebrow:hover {
+    transform: translateY(-2px);
+    background: rgba(99, 102, 241, 0.12);
+    box-shadow: 0 6px 20px rgba(79, 70, 229, 0.15);
+}
+
+
+
+
+
+
+
 
 h1 {
   margin: 0;
@@ -411,4 +452,52 @@ button:disabled {
   button {
     width: 100%;
   }
+}
+
+
+
+h1 {
+    font-family: "Poppins", "Segoe UI", sans-serif;
+    font-size: 2.6rem;
+    font-weight: 800;
+    letter-spacing: 4px;
+    margin: 0;
+    text-transform: uppercase;
+
+    background: linear-gradient(
+        90deg,
+        #2563eb,
+        #7c3aed,
+        #06b6d4,
+        #2563eb
+    );
+    background-size: 300% auto;
+
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+
+    filter: drop-shadow(0 5px 12px rgba(37, 99, 235, 0.2));
+
+    animation: sahayakGlow 4s ease-in-out infinite;
+}
+
+@keyframes sahayakGlow {
+    0% {
+        background-position: 0% center;
+        filter: drop-shadow(0 5px 12px rgba(37, 99, 235, 0.15));
+        transform: translateY(0);
+    }
+
+    50% {
+        background-position: 100% center;
+        filter: drop-shadow(0 6px 20px rgba(124, 58, 237, 0.35));
+        transform: translateY(-2px);
+    }
+
+    100% {
+        background-position: 0% center;
+        filter: drop-shadow(0 5px 12px rgba(37, 99, 235, 0.15));
+        transform: translateY(0);
+    }
 }
