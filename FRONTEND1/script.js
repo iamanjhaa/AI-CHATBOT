@@ -1,4 +1,7 @@
-const API_URL = "http://127.0.0.1:8000/chat";
+// const API_URL = "http://127.0.0.1:8000/chat";
+
+
+const API_URL = "https://sahayak-backend-y4f0.onrender.com/chat";
 
 const chatForm = document.getElementById("chatForm");
 const problemInput = document.getElementById("problemInput");
