@@ -798,5 +798,79 @@ def _has_any(text: str, signals: list[str]) -> bool:
     return any(signal in text for signal in signals)
 
 
+def _is_civic_report(text: str) -> bool:
+    civic_subjects = [
+        "garbage",
+        "kachra",
+        "trash",
+        "waste",
+        "sewage",
+        "sewer",
+        "drain",
+        "nali",
+        "road",
+        "sadak",
+        "street light",
+        "streetlight",
+        "water supply",
+        "public toilet",
+        "mosquito",
+        "machhar",
+    ]
+
+    report_signals = [
+        "complaint",
+        "complain",
+        "report",
+        "kahan karu",
+        "kaha karu",
+        "kahan kare",
+        "kaha kare",
+        "authority",
+        "municipal",
+        "nagar nigam",
+        "nagar palika",
+        "government",
+        "sarkar",
+        "helpline",
+    ]
+
+    return _has_any(text, civic_subjects) and _has_any(text, report_signals)
+
+
+def _is_pressure_cooker_danger(text: str) -> bool:
+    pressure_cooker_signals = [
+        "pressure cooker",
+        "pressure-cooker",
+        "cooker se steam",
+        "cooker se bhap",
+        "cooker phat",
+        "cooker blast",
+        "cooker ki seeti",
+        "cooker ki whistle",
+    ]
+
+    danger_signals = [
+        "phat",
+        "blast",
+        "burst",
+        "steam leak",
+        "bhap leak",
+        "pressure",
+        "seeti nahi",
+        "whistle nahi",
+        "stuck",
+        "jam",
+        "danger",
+        "dangerous",
+        "dar lag",
+    ]
+
+    return _has_any(text, pressure_cooker_signals) and _has_any(
+        text, danger_signals
+    )
+
+
+
 def _normalize(value: str) -> str:
     return " ".join(str(value or "").lower().replace("-", " ").split())
