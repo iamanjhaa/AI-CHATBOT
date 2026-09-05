@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -23,6 +23,10 @@ class UserIntent(str, Enum):
 
 class ChatRequest(BaseModel):
     problem: str = Field(..., min_length=1, description="User's household or local societal problem")
+    language: Literal["en", "hi"] = Field(
+        default="en",
+        description="Selected response language: en for English or hi for Hindi",
+    )
 
 
 class ProblemUnderstanding(BaseModel):

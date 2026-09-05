@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="mul">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,11 +8,11 @@
 </head>
 <body>
   <main class="app-shell">
-    <section class="chat-panel" aria-label="SAHAYAK chatbot">
+    <section class="chat-panel" aria-label="SAHAYAK chatbot" aria-describedby="noticeText">
       <header class="chat-header">
         <div class="brand-block">
           <h1 id="appTitle">SAHAYAK</h1>
-          <p class="eyebrow">AI-powered real-world problem resolution assistant</p>
+          <p class="eyebrow">Real-world problem resolution assistant</p>
         </div>
         <div class="header-controls">
           <label for="languageSelect" id="languageLabel">Language</label>
@@ -20,7 +20,7 @@
             <option value="hi">हिंदी</option>
             <option value="en" selected>English</option>
           </select>
-          <span id="statusPill" class="status-pill">Mock AI</span>
+          <span id="statusPill" class="status-pill" role="status" aria-live="polite">Ready</span>
         </div>
       </header>
 
@@ -46,9 +46,10 @@
           dir="auto"
           rows="2"
           placeholder="Example: Mere ghar mein gas leak ho rahi hai aur smell aa rahi hai ..."
+          aria-describedby="noticeText"
           required
         ></textarea>
-        <button id="sendButton" type="submit">Send</button>
+        <button id="sendButton" type="submit" aria-label="Send message">Send</button>
       </form>
     </section>
   </main>

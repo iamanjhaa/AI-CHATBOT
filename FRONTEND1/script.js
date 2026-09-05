@@ -1,7 +1,11 @@
-// const API_URL = "http://127.0.0.1:8000/chat";
-
-
-const API_URL = "https://sahayak-backend-y4fu.onrender.com/chat";
+const LOCAL_API_URL = "http://127.0.0.1:8000/chat";
+const DEPLOYED_API_URL = "https://sahayak-backend-y4fu.onrender.com/chat";
+const API_URL =
+  window.location.protocol === "file:" ||
+  window.location.hostname === "127.0.0.1" ||
+  window.location.hostname === "localhost"
+    ? LOCAL_API_URL
+    : DEPLOYED_API_URL;
 
 const chatForm = document.getElementById("chatForm");
 const problemInput = document.getElementById("problemInput");
@@ -24,7 +28,8 @@ const ui = {
   en: {
     appTitle: "SAHAYAK",
     language: "Language",
-    status: "Mock AI",
+    status: "Ready",
+    processing: "Processing...",
     notice: "Describe a household or local societal problem in Hindi, Hinglish, or English.",
     welcome: "Hello! I am SAHAYAK. Tell me your problem and I will suggest safe, practical next steps.",
     placeholder: "Example: Mere bathroom ka tap leak ho raha hai...",
@@ -32,8 +37,8 @@ const ui = {
     send: "Send",
     sending: "Sending...",
     emptyError: "Please describe your problem first.",
-    backendError: "Unable to get response from backend.",
-    fallbackError: "Something went wrong. Please try again.",
+    backendError: "Unable to connect to the chatbot service right now. Please try again.",
+    fallbackError: "Unable to connect to the chatbot service right now. Please try again.",
     safeDiy: "Safe DIY guidance available",
     professional: "Professional or authority support recommended",
     emergency: "Emergency or authority escalation needed",
@@ -51,11 +56,19 @@ const ui = {
     authority: "When To Contact A Professional Or Authority",
     prevention: "Prevention Tips",
     followUp: "Follow-up Question",
+    helplines: "Helplines",
+    category: "Category",
+    service: "Service",
+    phone: "Phone",
+    purpose: "Purpose",
+    call: "Call",
+    notAvailable: "N/A",
   },
   hi: {
     appTitle: "SAHAYAK",
     language: "भाषा",
-    status: "मॉक एआई",
+    status: "तैयार",
+    processing: "प्रक्रिया जारी है...",
     notice: "घरेलू या स्थानीय सामाजिक समस्या हिंदी, हिंग्लिश या अंग्रेज़ी में लिखें।",
     welcome: "नमस्ते! मैं SAHAYAK हूं। अपनी समस्या बताइए, मैं सुरक्षित और व्यावहारिक अगले कदम बताऊंगा।",
     placeholder: "उदाहरण: मेरे बाथरूम का नल लीक हो रहा है...",
@@ -63,8 +76,8 @@ const ui = {
     send: "भेजें",
     sending: "भेजा जा रहा है...",
     emptyError: "कृपया पहले अपनी समस्या लिखें।",
-    backendError: "बैकएंड से जवाब नहीं मिल सका।",
-    fallbackError: "कुछ गलत हो गया। कृपया फिर कोशिश करें।",
+    backendError: "अभी चैटबॉट सेवा से कनेक्ट नहीं हो सका। कृपया फिर कोशिश करें।",
+    fallbackError: "अभी चैटबॉट सेवा से कनेक्ट नहीं हो सका। कृपया फिर कोशिश करें।",
     safeDiy: "सुरक्षित घरेलू समाधान उपलब्ध है",
     professional: "विशेषज्ञ या संबंधित अधिकारी की मदद लेना बेहतर है",
     emergency: "आपातकालीन या अधिकारी की मदद ज़रूरी है",
@@ -82,6 +95,13 @@ const ui = {
     authority: "विशेषज्ञ या अधिकारी से कब संपर्क करें",
     prevention: "रोकथाम के सुझाव",
     followUp: "छोटा सवाल",
+    helplines: "हेल्पलाइन",
+    category: "श्रेणी",
+    service: "सेवा",
+    phone: "फोन",
+    purpose: "उद्देश्य",
+    call: "कॉल करें",
+    notAvailable: "उपलब्ध नहीं",
   },
 };
 
@@ -219,8 +239,17 @@ languageSelect.addEventListener("change", () => {
   updateLanguage();
 });
 
+problemInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    chatForm.requestSubmit();
+  }
+});
+
 chatForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+
+  if (loadingState) return;
 
   const problem = problemInput.value.trim();
   if (!problem) {
@@ -238,12 +267,11 @@ chatForm.addEventListener("submit", async (event) => {
     const response = await fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ problem }),
+      body: JSON.stringify({ problem, language: currentLanguage }),
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => null);
-      throw new Error(errorData?.detail || t("backendError"));
+      throw new Error(t("backendError"));
     }
 
     const data = await response.json();
@@ -251,7 +279,7 @@ chatForm.addEventListener("submit", async (event) => {
     addAiResponse(buildDynamicResponse(data));
   } catch (error) {
     loadingMessage.remove();
-    showError(error.message || t("fallbackError"));
+    showError(t("fallbackError"));
   } finally {
     setLoading(false);
     problemInput.focus();
@@ -265,14 +293,13 @@ function buildDynamicResponse(apiData) {
 
   const problem = apiData.problem || "";
   const matches = findMatchingRules(problem);
+  if (matches.length === 0) {
+    return buildUnknownResponse(problem, apiData.helplines);
+  }
+
   const severity = resolveSeverity(apiData.severity, matches);
   const response = emptyResponse(problem, severity);
   response.helplines = Array.isArray(apiData.helplines) ? apiData.helplines : [];
-
-  if (matches.length === 0) {
-    applyUnknownProblemGuidance(response, problem);
-    return response;
-  }
 
   matches.forEach((rule) => applyRule(response, rule));
   refineCombinedRisks(response, matches);
@@ -297,6 +324,23 @@ function hasBackendGuidance(apiData) {
 
 function buildBackendResponse(apiData) {
   const problem = apiData.problem || "";
+
+  if (currentLanguage === "hi") {
+    const bilingualMatches = findMatchingRules(problem);
+    if (bilingualMatches.length > 0) {
+      const localizedResponse = emptyResponse(
+        problem,
+        resolveSeverity(apiData.severity, bilingualMatches),
+      );
+      localizedResponse.helplines = Array.isArray(apiData.helplines)
+        ? apiData.helplines
+        : [];
+      bilingualMatches.forEach((rule) => applyRule(localizedResponse, rule));
+      refineCombinedRisks(localizedResponse, bilingualMatches);
+      return localizedResponse;
+    }
+  }
+
   const solutionInfo = apiData.solution_info || {};
   const safetyGuidance = apiData.safety_guidance || {};
   const escalation = apiData.escalation || {};
@@ -349,6 +393,14 @@ function emptyResponse(problem, severity) {
       hi: { identified: summarizeProblem(problem, "hi") },
     },
   };
+}
+
+function buildUnknownResponse(problem, helplines) {
+  const response = emptyResponse(problem, "UNKNOWN");
+  response.can_solve_myself = false;
+  response.helplines = Array.isArray(helplines) ? helplines : [];
+  applyUnknownProblemGuidance(response, problem);
+  return response;
 }
 
 function applyRule(response, rule) {
@@ -484,9 +536,10 @@ function addAiResponse(data) {
 
 function addLoadingMessage() {
   const message = createMessage("AI", "ai-message");
+  message.setAttribute("aria-label", t("processing"));
   const bubble = message.querySelector(".bubble");
   bubble.innerHTML = `
-    <div class="typing" aria-label="Loading">
+    <div class="typing" role="status" aria-label="${t("processing")}">
       <span></span><span></span><span></span>
     </div>
   `;
@@ -543,7 +596,7 @@ function appendHelplineSection(card, helplines) {
   const list = document.createElement("div");
 
   heading.className = "section-title";
-  heading.textContent = "Helplines";
+  heading.textContent = t("helplines");
 
   helplines.forEach((helpline) => {
     const item = document.createElement("article");
@@ -553,11 +606,12 @@ function appendHelplineSection(card, helplines) {
     const purpose = document.createElement("p");
     const callLink = document.createElement("a");
 
-    category.textContent = `Category: ${helpline.category || "N/A"}`;
-    name.textContent = `Service: ${helpline.name || "N/A"}`;
-    number.textContent = `Phone: ${helpline.number || "N/A"}`;
-    purpose.textContent = `Purpose: ${helpline.purpose || "N/A"}`;
-    callLink.textContent = "Call";
+    const notAvailable = t("notAvailable");
+    category.textContent = `${t("category")}: ${helpline.category || notAvailable}`;
+    name.textContent = `${t("service")}: ${helpline.name || notAvailable}`;
+    number.textContent = `${t("phone")}: ${helpline.number || notAvailable}`;
+    purpose.textContent = `${t("purpose")}: ${helpline.purpose || notAvailable}`;
+    callLink.textContent = t("call");
     callLink.href = `tel:${String(helpline.number || "").replace(/[^\d+]/g, "")}`;
 
     item.append(category, name, number, purpose, callLink);
@@ -628,6 +682,9 @@ function setLoading(isLoading) {
   loadingState = isLoading;
   sendButton.disabled = isLoading;
   sendButton.textContent = isLoading ? t("sending") : t("send");
+  sendButton.setAttribute("aria-busy", String(isLoading));
+  statusPill.textContent = isLoading ? t("processing") : t("status");
+  chatForm.setAttribute("aria-busy", String(isLoading));
 }
 
 function showError(message) {
